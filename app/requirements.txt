@@ -1,0 +1,7 @@
+# Core (for later: FastAPI, DB driver)
+# fastapi
+# uvicorn
+# sqlalchemy
+
+# Testing
+pytest>=7.0.0
