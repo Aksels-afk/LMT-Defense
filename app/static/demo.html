@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>LMT Defence – Intercept Demo</title>
+  <title>LMT Defence Intercept Demo</title>
   <style>
     body { font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; margin: 2rem; }
     h1 { margin-bottom: 0.5rem; }
@@ -17,15 +17,15 @@
   </style>
 </head>
 <body>
-  <h1>LMT Defence – Intercept Demo</h1>
+  <h1>LMT Defence Demo</h1>
   <p>
-    This demo simulates the radar system:
+    This demo simulates the radar system (1/second frequency):
     <ul>
       <li>Calls <code>/intercept</code> <strong>once</strong> at start to get static intercept point C</li>
-      <li>Calls <code>/radar/next</code> <strong>every second</strong> to get updated threat position B(t) from API</li>
-      <li>Calculates interceptor position I(t) in HTML, moving from base A toward C</li>
+      <li><strong>Radar sends</strong> threat position B to the demo every second via <code>/radar/stream</code> (Server-Sent Events)</li>
+      <li>Interceptor position A is computed in the browser, moving from base toward C</li>
     </ul>
-    <strong>B(t)</strong>: Threat lat/lon updated from API | <strong>C</strong>: Static intercept point | <strong>I(t)</strong>: Interceptor managed in HTML
+    <strong>B</strong>: Threat lat/lon sent by radar (1 Hz) | <strong>C</strong>: Static intercept point | <strong>A</strong>: Interceptor in HTML
   </p>
 
   <form id="config-form">
@@ -55,7 +55,7 @@
 
   <div class="status">
     Status: <span id="status-text">Idle</span><br />
-    Current Google Maps snapshot:
+    Current map:
     <a id="map-link" href="#" target="_blank">none</a>
   </div>
 
@@ -105,7 +105,7 @@
     const resultsBody = document.getElementById("results-body");
     const mapLink = document.getElementById("map-link");
 
-    let timerId = null;
+    let eventSource = null;
     let t = 0;
     let threatLat = 0;
     let threatLon = 0;
@@ -140,74 +140,50 @@
       return { lat, lon };
     }
 
-    async function tick() {
-      // Get updated threat position from radar API (B(t) updates from API)
-      try {
-        const radarPayload = {
-          speed_ms: speedMs,
-          altitude_m: altitudeM,
-          heading_deg: headingDeg,
-          latitude: threatLat,
-          longitude: threatLon,
-          report_time: new Date().toISOString()
-        };
+    function onRadarUpdate(data) {
+      // Radar sends info to the demo: threat position at this second
+      t = data.second;
+      threatLat = data.latitude;
+      threatLon = data.longitude;
 
-        const radarResp = await fetch("/radar/next", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(radarPayload)
-        });
+      const interceptorPos = calculateInterceptorPosition(t);
 
-        const radarData = await radarResp.json();
-        
-        // Update threat position from API response
-        threatLat = radarData.latitude;
-        threatLon = radarData.longitude;
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${t}</td>
+        <td>${threatLat.toFixed(6)}</td>
+        <td>${threatLon.toFixed(6)}</td>
+        <td>${interceptLat != null ? interceptLat.toFixed(6) : ""}</td>
+        <td>${interceptLon != null ? interceptLon.toFixed(6) : ""}</td>
+        <td>${interceptorPos.lat != null ? interceptorPos.lat.toFixed(6) : ""}</td>
+        <td>${interceptorPos.lon != null ? interceptorPos.lon.toFixed(6) : ""}</td>
+        <td>${baseName ?? ""}</td>
+        <td>${interceptorType ?? ""}</td>
+        <td>${cost ?? ""}</td>
+      `;
+      resultsBody.appendChild(row);
+      setStatus("Running, t = " + t + " s (radar updating)");
 
-        // Calculate interceptor position I(t) moving from A toward C (managed in HTML)
-        const interceptorPos = calculateInterceptorPosition(t);
-
-        // Add row to table
-        const row = document.createElement("tr");
-        row.innerHTML = `
-          <td>${t}</td>
-          <td>${threatLat.toFixed(6)}</td>
-          <td>${threatLon.toFixed(6)}</td>
-          <td>${interceptLat != null ? interceptLat.toFixed(6) : ""}</td>
-          <td>${interceptLon != null ? interceptLon.toFixed(6) : ""}</td>
-          <td>${interceptorPos.lat != null ? interceptorPos.lat.toFixed(6) : ""}</td>
-          <td>${interceptorPos.lon != null ? interceptorPos.lon.toFixed(6) : ""}</td>
-          <td>${baseName ?? ""}</td>
-          <td>${interceptorType ?? ""}</td>
-          <td>${cost ?? ""}</td>
-        `;
-        resultsBody.appendChild(row);
-
-        setStatus("Running – t = " + t + " s");
-
-        // Check if interceptor has reached intercept point
-        if (timeToIntercept != null && t >= timeToIntercept) {
-          clearInterval(timerId);
-          timerId = null;
-          setStatus("Finished – interceptor reached intercept point at t = " + t + " s");
-          startBtn.disabled = false;
-          stopBtn.disabled = true;
-          return;
-        }
-
-        t += 1;
-      } catch (err) {
-        console.error(err);
-        setStatus("Error getting radar update: " + err);
-        clearInterval(timerId);
-        timerId = null;
+      if (timeToIntercept != null && t >= timeToIntercept) {
+        if (eventSource) { eventSource.close(); eventSource = null; }
+        setStatus("Finished – interceptor reached intercept point at t = " + t + " s");
         startBtn.disabled = false;
         stopBtn.disabled = true;
       }
     }
 
+    function stopStream() {
+      if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+      }
+      setStatus("Stopped at t = " + t + " s");
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+    }
+
     startBtn.addEventListener("click", async () => {
-      if (timerId !== null) return;
+      if (eventSource !== null) return;
 
       speedMs = parseFloat(document.getElementById("speed_ms").value);
       altitudeM = parseFloat(document.getElementById("altitude_m").value);
@@ -222,7 +198,6 @@
       startBtn.disabled = true;
       stopBtn.disabled = false;
 
-      // Call /intercept ONCE to get static intercept point C
       try {
         const payload = {
           speed_ms: speedMs,
@@ -230,8 +205,7 @@
           heading_deg: headingDeg,
           latitude: threatLat,
           longitude: threatLon,
-          report_time: new Date().toISOString(),
-          seconds_since_launch: 0.0
+          report_time: new Date().toISOString()
         };
 
         const resp = await fetch("/intercept", {
@@ -249,7 +223,6 @@
           return;
         }
 
-        // Store static values (never change)
         baseLat = data.base_latitude;
         baseLon = data.base_longitude;
         interceptLat = data.intercept_latitude;
@@ -265,12 +238,30 @@
           mapLink.textContent = "Open in Google Maps";
         }
 
-        // Now start the visualization loop (no more API calls)
-        setStatus("Running – t = 0 s");
-        timerId = setInterval(tick, 1000);
-        
-        // Do first tick immediately
-        tick();
+        // Radar sends info to the demo at 1 Hz via Server-Sent Events
+        // Ensure stream runs long enough: timeToIntercept + 30s buffer, capped at 3600s (1 hour)
+        const maxSeconds = Math.min(3600, Math.ceil((timeToIntercept || 300) + 30));
+        const streamUrl = "/radar/stream?latitude=" + encodeURIComponent(threatLat) +
+          "&longitude=" + encodeURIComponent(threatLon) +
+          "&speed_ms=" + encodeURIComponent(speedMs) +
+          "&altitude_m=" + encodeURIComponent(altitudeM) +
+          "&heading_deg=" + encodeURIComponent(headingDeg) +
+          "&max_seconds=" + maxSeconds;
+
+        setStatus("Running – radar sending updates at 1/second...");
+        eventSource = new EventSource(streamUrl);
+
+        eventSource.onmessage = (e) => {
+          const data = JSON.parse(e.data);
+          // Log updates in browser console
+          console.log("Radar update received t=" + data.second, data.latitude.toFixed(6), data.longitude.toFixed(6));
+          onRadarUpdate(data);
+        };
+
+        eventSource.onerror = () => {
+          if (eventSource) { eventSource.close(); eventSource = null; }
+          stopStream();
+        };
       } catch (err) {
         console.error(err);
         setStatus("Error: " + err);
@@ -280,12 +271,10 @@
     });
 
     stopBtn.addEventListener("click", () => {
-      if (timerId !== null) {
-        clearInterval(timerId);
-        timerId = null;
-        setStatus("Stopped at t = " + t + " s");
-        startBtn.disabled = false;
-        stopBtn.disabled = true;
+      if (eventSource !== null) {
+        eventSource.close();
+        eventSource = null;
+        stopStream();
       }
     });
   </script>

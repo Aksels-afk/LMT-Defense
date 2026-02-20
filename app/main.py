@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from datetime import datetime
+import asyncio
+import json
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 from typing import Optional
 
 from pathlib import Path
 
-from fastapi import FastAPI
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi import FastAPI, Query
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -15,13 +18,13 @@ from .logic import calculate_intercept, move_position
 
 
 class RadarReport(BaseModel):
+    #calculates where the interceptor will intercept the threat
     speed_ms: float
     altitude_m: float
     heading_deg: float
     latitude: float
     longitude: float
     report_time: float | datetime
-    seconds_since_launch: Optional[float] = 0.0  # Time elapsed since interceptor launch (for tracking current position)
 
 
 class InterceptDecision(BaseModel):
@@ -40,44 +43,20 @@ class InterceptDecision(BaseModel):
     map_url: Optional[str] = None
 
 
-class SimulationRequest(BaseModel):
-    #Initial threat parameters for simulation.
-    initial_latitude: float
-    initial_longitude: float
-    speed_ms: float
-    altitude_m: float
-    heading_deg: float
-    duration_seconds: int = 10  # How many seconds to simulate
-    report_time_start: float = 0.0  # Starting timestamp
-
-
-class SimulationStep(BaseModel):
-    #One second of simulation.
-    second: int
-    threat_latitude: float
-    threat_longitude: float
-    decision: InterceptDecision
-
-
-class SimulationResponse(BaseModel):
-    #Complete simulation results.
-    initial_params: SimulationRequest
-    steps: list[SimulationStep]
-
-
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Initialize database on application startup
+    init_database()
+    yield
 
 # Mount static files directory for HTML/CSS/JS
 APP_DIR = Path(__file__).resolve().parent
 static_dir = APP_DIR / "static"
+
+app = FastAPI(lifespan=lifespan)
+
 if static_dir.exists():
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
-
-
-@app.on_event("startup")
-def startup_event():
-    #Initialize database on application startup.
-    init_database()
 
 
 @app.get("/")
@@ -90,46 +69,60 @@ def health():
     return {"status": "ok"}
 
 
-class RadarUpdate(BaseModel):
-    #Radar system update per second.
-    speed_ms: float
-    altitude_m: float
-    heading_deg: float
-    latitude: float
-    longitude: float
-    report_time: float | datetime
+async def _radar_stream_generator(
+    latitude: float,
+    longitude: float,
+    speed_ms: float,
+    altitude_m: float,
+    heading_deg: float,
+    max_seconds: int,
+):
+    #Yield SSE events at 1 Hz: radar sends updated threat position to the client.
+    report_time: datetime | float = datetime.now()
+    lat, lon = latitude, longitude
+    for second in range(max_seconds + 1):
+        payload = {
+            "second": second,
+            "latitude": lat,
+            "longitude": lon,
+            "speed_ms": speed_ms,
+            "altitude_m": altitude_m,
+            "heading_deg": heading_deg,
+            "report_time": report_time.isoformat() if isinstance(report_time, datetime) else report_time,
+        }
+        # Log each sent update in terminal
+        print(f"radar/stream: sending update t={second}", flush=True)
+        yield f"data: {json.dumps(payload)}\n\n"
+        if second >= max_seconds:
+            break
+        lat, lon = move_position(lat, lon, heading_deg, speed_ms, 1.0)
+        if isinstance(report_time, datetime):
+            report_time = report_time + timedelta(seconds=1)
+        else:
+            report_time = report_time + 1.0
+        await asyncio.sleep(1.0)
 
 
-@app.post("/radar/next", response_model=RadarUpdate)
-def radar_next(current: RadarUpdate) -> RadarUpdate:
+@app.get("/radar/stream")
+async def radar_stream(
+    latitude: float = Query(..., description="Initial threat latitude"),
+    longitude: float = Query(..., description="Initial threat longitude"),
+    speed_ms: float = Query(..., description="Threat speed m/s"),
+    altitude_m: float = Query(..., description="Threat altitude m"),
+    heading_deg: float = Query(..., description="Threat heading degrees"),
+    max_seconds: int = Query(600, ge=1, le=3600, description="Max events to send (1/second)"),
+):
     
-    #Simulate radar system sending next update (1 second later).
+    #Server-Sent Events stream: radar sends threat position updates to the demo at 1 Hz.
+    #The radar system updates the information with new coordinates every second (frequency 1/second).
     
-    #Takes current threat position and returns where it will be after 1 second,
-    #based on speed and heading. This simulates the radar system updating at 1/second frequency.
-    # Move threat 1 second forward
-    new_lat, new_lon = move_position(
-        current.latitude,
-        current.longitude,
-        current.heading_deg,
-        current.speed_ms,
-        1.0
-    )
+    #Note: Ensure max_seconds is >= time_to_intercept_s (from /intercept) + buffer (e.g. 30s)
+    #to avoid the stream ending before the interceptor reaches the target.
     
-    # Increment report_time by 1 second
-    if isinstance(current.report_time, datetime):
-        from datetime import timedelta
-        new_report_time = current.report_time + timedelta(seconds=1)
-    else:
-        new_report_time = current.report_time + 1.0
-    
-    return RadarUpdate(
-        speed_ms=current.speed_ms,
-        altitude_m=current.altitude_m,
-        heading_deg=current.heading_deg,
-        latitude=new_lat,
-        longitude=new_lon,
-        report_time=new_report_time,
+    return StreamingResponse(
+        _radar_stream_generator(latitude, longitude, speed_ms, altitude_m, heading_deg, max_seconds),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
     )
 
 
@@ -144,64 +137,10 @@ def intercept(report: RadarReport) -> InterceptDecision:
         heading_deg=report.heading_deg,
         latitude=report.latitude,
         longitude=report.longitude,
-        seconds_since_launch=report.seconds_since_launch or 0.0,
+        seconds_since_launch=0.0,
     )
     
     return InterceptDecision(**result)
-
-
-@app.post("/simulate", response_model=SimulationResponse)
-def simulate(request: SimulationRequest) -> SimulationResponse:
-    
-    #Simulate radar system sending updates every second (1/second frequency).
-    
-    #This endpoint demonstrates how the interceptor's current location updates every second
-    #as it moves toward the static intercept point. Each second:
-    #1. Threat position is updated based on speed and heading
-    #2. Intercept point remains STATIC (calculated once based on initial threat position)
-    #3. Interceptor's current location is updated as it moves from base toward intercept point
-    
-    #Takes initial threat parameters and simulates movement for duration_seconds.
-    #Returns all results showing how interceptor position evolves over time.
-    
-    steps: list[SimulationStep] = []
-    
-    current_lat = request.initial_latitude
-    current_lon = request.initial_longitude
-    current_time = request.report_time_start
-    
-    for second in range(request.duration_seconds):
-        # Calculate intercept decision for this position
-        # seconds_since_launch tracks how long interceptor has been moving toward intercept point
-        result = calculate_intercept(
-            speed_ms=request.speed_ms,
-            altitude_m=request.altitude_m,
-            heading_deg=request.heading_deg,
-            latitude=current_lat,
-            longitude=current_lon,
-            seconds_since_launch=float(second),  # Update interceptor position every second
-        )
-        
-        decision = InterceptDecision(**result)
-        
-        # Store this step
-        steps.append(SimulationStep(
-            second=second,
-            threat_latitude=current_lat,
-            threat_longitude=current_lon,
-            decision=decision,
-        ))
-        
-        # Move threat to next position (1 second forward)
-        current_lat, current_lon = move_position(
-            current_lat, current_lon, request.heading_deg, request.speed_ms, 1.0
-        )
-        current_time += 1.0
-    
-    return SimulationResponse(
-        initial_params=request,
-        steps=steps,
-    )
 
 
 @app.get("/demo", response_class=HTMLResponse)
