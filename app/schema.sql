@@ -1,8 +1,8 @@
 CREATE TABLE bases (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
-    latitude DECIMAL(10, 8) NOT NULL,
-    longitude DECIMAL(11, 8) NOT NULL /* [1] */
+    latitude REAL NOT NULL,
+    longitude REAL NOT NULL
 );
 
 CREATE TABLE interceptor_types (
@@ -12,13 +12,13 @@ CREATE TABLE interceptor_types (
     range_m REAL NOT NULL,
     max_altitude_m REAL NOT NULL,
     price_model TEXT NOT NULL,
-    price_value_eur DECIMAL(10,2) NOT NULL
+    price_value_eur REAL NOT NULL
 );
 
 CREATE TABLE base_interceptors (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    base_id INT NOT NULL,
-    interceptor_id INT NOT NULL,
+    base_id INTEGER NOT NULL,
+    interceptor_id INTEGER NOT NULL,
     UNIQUE (base_id, interceptor_id),
     FOREIGN KEY (base_id) REFERENCES bases(id),
     FOREIGN KEY (interceptor_id) REFERENCES interceptor_types(id)
@@ -36,18 +36,14 @@ INSERT INTO interceptor_types (name, speed_ms, range_m, max_altitude_m, price_mo
     ('Rocket', 1500.00, 100000.00, 30000.00, 'flat', 300000.00),
     ('50Cal', 900.00, 2000.00, 2000.00, 'per_shot', 1.00);
 
+-- Base-interceptor availability
 INSERT INTO base_interceptors (base_id, interceptor_id) VALUES
-    -- Riga has all types (id 1)
-    (1,1),
-    (1,2),
-    (1,3),
-    (1,4);
-INSERT INTO base_interceptors (base_id, interceptor_id) VALUES
-    -- Liepaja has only drone and 50Cal (id 2)
-    (2,1),
-    (2,4);
-INSERT INTO base_interceptors (base_id, interceptor_id) VALUES
-    -- Daugavpils has drone, 50cal, rocket.
-    (3,1),
-    (3,3),
-    (3,4);
+    (1, 1), -- Riga -> Interceptor drone
+    (1, 2), -- Riga -> Fighter jet
+    (1, 3), -- Riga -> Rocket
+    (1, 4), -- Riga -> 50Cal
+    (2, 1), -- Liepaja -> Interceptor drone
+    (2, 4), -- Liepaja -> 50Cal
+    (3, 1), -- Daugavpils -> Interceptor drone
+    (3, 3), -- Daugavpils -> Rocket
+    (3, 4); -- Daugavpils -> 50Cal

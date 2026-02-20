@@ -6,16 +6,15 @@ POTENTIAL_THREAT = "POTENTIAL_THREAT"
 
 
 def classify_threat(speed_ms: float, altitude_m: float) -> str:
-    """
-    Classify a track as NOT_THREAT, CAUTION, THREAT, or POTENTIAL_THREAT.
+    #Classify a threat as NOT_THREAT, CAUTION, THREAT, or POTENTIAL_THREAT.
 
-    Args:
-        speed_ms: Speed in metres per second.
-        altitude_m: Altitude in metres.
+    #Args:
+    #    speed_ms: Speed in meters per second.
+    #    altitude_m: Altitude in meters.
 
-    Returns:
-        One of: NOT_THREAT, CAUTION, THREAT, POTENTIAL_THREAT.
-    """
+    #Returns:
+     #   One of: NOT_THREAT, CAUTION, THREAT, POTENTIAL_THREAT.
+    
     # Rule order (first match wins):
     # 1. If speed < 15 OR altitude < 200 then NOT_THREAT
     # 2. If speed > 50 then THREAT

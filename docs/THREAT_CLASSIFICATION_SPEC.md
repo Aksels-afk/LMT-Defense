@@ -27,7 +27,7 @@
 
 4. **POTENTIAL_THREAT** All other cases.
 
-So after step 1, only consider targets with speed ≥ 15 and altitude ≥ 200.  
+So after step 1, only consider targets with speed >= 15 and altitude >= 200.  
 Then: speed > 50 is THREAT; else speed > 15 - CAUTION; else - POTENTIAL_THREAT.
 
 ## Edge cases to test

@@ -1,6 +1,5 @@
-"""
-Unit tests for threat classification.
-"""
+# Unit tests for threat classification.
+
 import pytest
 
 from app.classification import (
@@ -12,7 +11,7 @@ from app.classification import (
 )
 
 
-# --- Edge cases from the spec ---
+# Edge cases from the spec
 
 @pytest.mark.parametrize("speed_ms,altitude_m,expected", [
     (0, 0, NOT_THREAT),
