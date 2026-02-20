@@ -27,7 +27,7 @@ def test_liepaja_20km_uses_drone() -> None:
     # (50Cal is out of range; other bases cannot reach and are expensive).
     
     # Approximate 20km from Liepaja base.
-    threat_lat = 56.516441, 
+    threat_lat = 56.516441
     threat_lon = 21.109256
 
     payload = {
@@ -36,7 +36,7 @@ def test_liepaja_20km_uses_drone() -> None:
         "heading_deg": 90.0,       # arbitrary heading
         "latitude": threat_lat,
         "longitude": threat_lon,
-        "report_time": datetime.now(),
+        "report_time": datetime.now().isoformat(),
     }
 
     response = client.post("/intercept", json=payload)
@@ -52,7 +52,7 @@ def test_liepaja_1km_uses_50cal() -> None:
     # We should send 50Cal since it would be the cost-effective option.
 
     # Approximate 1km from Liepaja base.
-    threat_lat = 56.515189,
+    threat_lat = 56.515189
     threat_lon = 21.022489
 
     payload = {
@@ -61,7 +61,7 @@ def test_liepaja_1km_uses_50cal() -> None:
         "heading_deg": 60,
         "latitude": threat_lat,
         "longitude": threat_lon,
-        "report_time": datetime.now(),
+        "report_time": datetime.now().isoformat(),
     }
 
     response = client.post("/intercept", json=payload)
@@ -77,7 +77,7 @@ def test_riga_20km_uses_rocket() -> None:
     # We should send Rocket
 
     #Approximate 20km from Riga base
-    threat_lat = 56.946797, 
+    threat_lat = 56.946797
     threat_lon = 24.275403
 
     payload = {
@@ -86,7 +86,7 @@ def test_riga_20km_uses_rocket() -> None:
         "heading_deg": 90,
         "latitude": threat_lat,
         "longitude": threat_lon,
-        "report_time": datetime.now(),
+        "report_time": datetime.now().isoformat(),
     }
 
     response = client.post("/intercept", json=payload)
@@ -102,7 +102,7 @@ def test_riga_1km_uses_fighter_jet() -> None:
     # We should send Fighter jet
 
     #Approximate 1km from Riga base at high altitude
-    threat_lat = 56.975734, 
+    threat_lat = 56.975734
     threat_lon = 24.175480
 
     payload = {
@@ -111,7 +111,7 @@ def test_riga_1km_uses_fighter_jet() -> None:
         "heading_deg": 270,
         "latitude": threat_lat,
         "longitude": threat_lon,
-        "report_time": datetime.now(),
+        "report_time": datetime.now().isoformat(),
     }
 
     response = client.post("/intercept", json=payload)
@@ -122,3 +122,127 @@ def test_riga_1km_uses_fighter_jet() -> None:
     assert data["interceptor_type"] == "Fighter jet"
 
 # Test 2.3: 1Km from Riga base at low altitude, should send 50Cal.
+def test_riga_1km_uses_50cal() -> None:
+    # Given the threat is about 1km from Riga base and at low altitude,
+    # We should use 50Cal.
+
+    #Approximate 1km from Riga base at low altitude
+    threat_lat = 56.976967
+    threat_lon = 24.164971
+
+    payload = {
+        "speed_ms": 500,
+        "altitude_m": 200,
+        "heading_deg": 180,
+        "latitude": threat_lat,
+        "longitude": threat_lon,
+        "report_time": datetime.now().isoformat(),
+    }
+
+    response = client.post("/intercept", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["base_name"] == "Riga"
+    assert data["interceptor_type"] == "50Cal"
+
+# Test 2.4: 20Km from Riga base at low altitude, should send drone.
+def test_riga_20km_uses_drone() -> None:
+    # Given the threat is about 20km from Riga base at low altitude,
+    # We should send drone
+
+    #Approximate 20km from Riga base at low altitude
+    threat_lat = 56.946479
+    threat_lon = 24.104754
+
+    payload = {
+        "speed_ms": 60,
+        "altitude_m": 1000,
+        "heading_deg": 60,
+        "latitude": threat_lat,
+        "longitude": threat_lon,
+        "report_time": datetime.now().isoformat(),
+    }
+
+    response = client.post("/intercept", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["base_name"] == "Riga"
+    assert data["interceptor_type"] == "Interceptor drone"
+
+# Test 3.1: 20Km from Daugavpils base at low altitude, should send drone.
+def test_daugavpils_20km_uses_drone() -> None:
+    #Given the threat is about 20Km from Daugavpils base at low altitude,
+    # Should send drone.
+
+    #Approximate 20km from Daugavpils base at low altitude
+    threat_lat = 55.887715
+    threat_lon = 26.608051
+
+    payload = {
+        "speed_ms": 60,
+        "altitude_m": 1000,
+        "heading_deg": 0,
+        "latitude": threat_lat,
+        "longitude": threat_lon,
+        "report_time": datetime.now().isoformat(),
+    }
+
+    response = client.post("/intercept", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["base_name"] == "Daugavpils"
+    assert data["interceptor_type"] == "Interceptor drone"
+
+# Test 3.2: 1Km from Daugavpils base at low altitude, should send 50Cal.
+def test_daugavpils_1km_uses_50cal() -> None:
+    #Given the threat is about 1km from Daugavpils base at low altitude,
+    # Should send 50Cal.
+
+    #Approximate 1km from Daugavpils base at low altitude
+    threat_lat = 55.874434
+    threat_lon = 26.524831
+
+    payload = {
+        "speed_ms": 500,
+        "altitude_m": 200,
+        "heading_deg": 180,
+        "latitude": threat_lat,
+        "longitude": threat_lon,
+        "report_time": datetime.now().isoformat(),
+    }
+
+    response = client.post("/intercept", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["base_name"] == "Daugavpils"
+    assert data["interceptor_type"] == "50Cal"
+
+# Test 3.3: 20Km from Daugavpils base at high altitude, should send Rocket.
+def test_daugavpils_20km_uses_rocket() -> None:
+    # Given the threat is about 20km from Daugavpils base at high altitude,
+    # We should use Rocket
+
+    # Approximate 20km from Daugavpils base at high altitude
+    threat_lat = 55.887715
+    threat_lon = 26.608051
+
+    payload = {
+        "speed_ms": 1400,
+        "altitude_m": 15000,
+        "heading_deg": 10,
+        "latitude": threat_lat,
+        "longitude": threat_lon,
+        "report_time": datetime.now().isoformat(),
+    }
+    
+    response = client.post("/intercept", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["base_name"] == "Daugavpils"
+    assert data["interceptor_type"] == "Rocket"
+
