@@ -37,7 +37,7 @@ def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:  #
 
 
 def move_position(lat: float, lon: float, heading_deg: float, speed_ms: float, time_s: float) -> tuple[float, float]:
-    #Calculate new position after moving at constant speed and heading for time_s seconds.
+    #Calculate new position after moving at constant speed and heading for time_s seconds. [5]
     #Returns (new_lat, new_lon).
     
     heading_rad = math.radians(heading_deg)
@@ -98,18 +98,28 @@ def calculate_intercept(
     heading_deg: float,
     latitude: float,
     longitude: float,
+    seconds_since_launch: float = 0.0,
 ) -> dict[str, Any]:
+   
     #Calculate best intercept option for a threat.
+    
+    #IMPORTANT: 
+    #- The intercept point (where interceptor will meet threat) is STATIC - calculated once
+    #- The interceptor's current location is updated every second (1/second frequency)
+    #  as it moves from the base toward the static intercept point
+    
     #Args:
     #    speed_ms: Threat speed in m/s
     #    altitude_m: Threat altitude in metres
     #    heading_deg: Threat heading in degrees
-    #    latitude: Threat latitude
-    #    longitude: Threat longitude
+    #    latitude: Threat latitude (current position)
+    #    longitude: Threat longitude (current position)
+    #    seconds_since_launch: Time elapsed since interceptor launch (for tracking current position)
     
     #Returns:
     #    dict with keys: threat_level, base_name, interceptor_type, intercept_latitude,
-    #    intercept_longitude, calculated_cost_eur, note, map_url
+    #    intercept_longitude, interceptor_current_latitude, interceptor_current_longitude,
+    #    calculated_cost_eur, note, map_url
     
     threat_level = classify_threat(speed_ms, altitude_m)
 
@@ -118,8 +128,13 @@ def calculate_intercept(
             "threat_level": threat_level,
             "base_name": None,
             "interceptor_type": None,
+            "base_latitude": None,
+            "base_longitude": None,
             "intercept_latitude": None,
             "intercept_longitude": None,
+            "time_to_intercept_s": None,
+            "interceptor_current_latitude": None,
+            "interceptor_current_longitude": None,
             "calculated_cost_eur": None,
             "note": "No interception: not a threat",
             "map_url": None,
@@ -131,6 +146,10 @@ def calculate_intercept(
     best_cost: Optional[float] = None
     best_intercept_lat: Optional[float] = None
     best_intercept_lon: Optional[float] = None
+    best_intercept_time: Optional[float] = None  # Time to intercept (for calculating current position)
+    best_base_lat: Optional[float] = None
+    best_base_lon: Optional[float] = None
+    best_speed: Optional[float] = None
 
     for opt in options:
         if altitude_m > float(opt["max_altitude_m"]):
@@ -238,22 +257,31 @@ def calculate_intercept(
             best_cost = cost
             best_intercept_lat = intercept_lat
             best_intercept_lon = intercept_lon
+            best_intercept_time = time_s
+            best_base_lat = base_lat
+            best_base_lon = base_lon
+            best_speed = speed_interceptor
 
     if best is None or best_cost is None or math.isinf(best_cost):
         return {
             "threat_level": threat_level,
             "base_name": None,
             "interceptor_type": None,
+            "base_latitude": None,
+            "base_longitude": None,
             "intercept_latitude": None,
             "intercept_longitude": None,
+            "time_to_intercept_s": None,
+            "interceptor_current_latitude": None,
+            "interceptor_current_longitude": None,
             "calculated_cost_eur": None,
             "note": "No interceptor found from available bases",
             "map_url": None,
         }
 
     # Build Google Maps directions URL showing triangle: base -> threat -> intercept point
-    base_lat = float(best["base_latitude"])
-    base_lon = float(best["base_longitude"])
+    base_lat = best_base_lat
+    base_lon = best_base_lon
     
     map_url = (
         f"https://www.google.com/maps/dir/?api=1"
@@ -264,12 +292,60 @@ def calculate_intercept(
         else None
     )
     
+    # Calculate interceptor's current position (updated every second)
+    # Interceptor moves from base toward intercept point
+    interceptor_current_lat: Optional[float] = None
+    interceptor_current_lon: Optional[float] = None
+    
+    if best_intercept_lat is not None and best_intercept_lon is not None:
+        # Calculate distance from base to intercept point
+        total_distance_m = haversine_m(base_lat, base_lon, best_intercept_lat, best_intercept_lon)
+        
+        # Calculate how far interceptor has traveled
+        distance_traveled_m = best_speed * seconds_since_launch
+        
+        if distance_traveled_m >= total_distance_m:
+            # Interceptor has reached or passed intercept point
+            interceptor_current_lat = best_intercept_lat
+            interceptor_current_lon = best_intercept_lon
+        elif distance_traveled_m > 0:
+            # Calculate heading from base to intercept point
+            lat0_rad = math.radians(base_lat)
+            m_per_deg_lat = 111_320.0
+            m_per_deg_lon = 111_320.0 * math.cos(lat0_rad)
+            
+            delta_lat_deg = best_intercept_lat - base_lat
+            delta_lon_deg = best_intercept_lon - base_lon
+            
+            # Distance in metres
+            delta_north_m = delta_lat_deg * m_per_deg_lat
+            delta_east_m = delta_lon_deg * m_per_deg_lon
+            
+            # Heading angle
+            heading_to_intercept_rad = math.atan2(delta_east_m, delta_north_m)
+            
+            # Current position along the path
+            current_north_m = math.cos(heading_to_intercept_rad) * distance_traveled_m
+            current_east_m = math.sin(heading_to_intercept_rad) * distance_traveled_m
+            
+            interceptor_current_lat = base_lat + current_north_m / m_per_deg_lat
+            interceptor_current_lon = base_lon + current_east_m / m_per_deg_lon
+        else:
+            # Interceptor hasn't launched yet (still at base)
+            interceptor_current_lat = base_lat
+            interceptor_current_lon = base_lon
+    
     return {
         "threat_level": threat_level,
         "base_name": str(best["base_name"]),
         "interceptor_type": str(best["interceptor_name"]),
-        "intercept_latitude": best_intercept_lat,
-        "intercept_longitude": best_intercept_lon,
+        "base_latitude": best_base_lat,  # Base location A
+        "base_longitude": best_base_lon,  # Base location A
+        "intercept_latitude": best_intercept_lat,  # Static intercept point C
+        "intercept_longitude": best_intercept_lon,  # Static intercept point C
+        "time_to_intercept_s": best_intercept_time,  # Time to reach intercept point
+        "interceptor_current_latitude": interceptor_current_lat,  # Updated every second
+        "interceptor_current_longitude": interceptor_current_lon,  # Updated every second
         "calculated_cost_eur": round(best_cost, 2),
         "note": "Chosen cheapest feasible option; intercept point predicted from target heading and speeds",
         "map_url": map_url,

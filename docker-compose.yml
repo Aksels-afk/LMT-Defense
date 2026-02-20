@@ -1,0 +1,20 @@
+# LMT Defence Docker Compose Configuration [4]
+
+services:
+  lmt-defence:
+    build: .
+    container_name: lmt-defence-api
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist database between container restarts
+      - ./data:/app/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
