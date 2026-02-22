@@ -104,8 +104,8 @@ def calculate_intercept(
     #Calculate best intercept option for a threat.
     
     #IMPORTANT: 
-    #- The intercept point (where interceptor will meet threat) is STATIC - calculated once
-    #- The interceptor's current location is updated every second (1/second frequency)
+    # The intercept point (where interceptor will meet threat) is STATIC - calculated once
+    # The interceptor's current location is updated every second (1/second frequency)
     #  as it moves from the base toward the static intercept point
     
     #Args:

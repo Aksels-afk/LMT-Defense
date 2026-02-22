@@ -1,0 +1,73 @@
+{
+    // VS Code debugger configuration for LMT Defence
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: FastAPI",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "uvicorn",
+            "args": [
+                "app.main:app",
+                "--reload",
+                "--host",
+                "0.0.0.0",
+                "--port",
+                "8000"
+            ],
+            "jinja": true,
+            "justMyCode": true,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "Python: Current Test File",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "args": [
+                "${file}",
+                "-v",
+                "-s",
+                "--no-header"
+            ],
+            "jinja": true,
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "PYTHONDONTWRITEBYTECODE": "1",
+                "PYTHONWARNINGS": "ignore"
+            },
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "python": "${command:python.interpreterPath}",
+            "gevent": false
+        },
+        {
+            "name": "Python: All Tests",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "args": [
+                "tests/",
+                "-v",
+                "-s",
+                "--no-header"
+            ],
+            "jinja": true,
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "PYTHONDONTWRITEBYTECODE": "1",
+                "PYTHONWARNINGS": "ignore"
+            },
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "python": "${command:python.interpreterPath}",
+            "gevent": false
+        }
+    ]
+}
