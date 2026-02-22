@@ -31,7 +31,7 @@ INSERT INTO bases (name, latitude, longitude) VALUES
 
 -- Insert Interceptor Types
 INSERT INTO interceptor_types (name, speed_ms, range_m, max_altitude_m, price_model, price_value_eur) VALUES
-    ('Interceptor drone', 80.00, 30000.00, 2000.00, 'flat', 10000.00),
+    ('Interceptor drone', 80.00, 3000.00, 2000.00, 'flat', 10000.00),
     ('Fighter jet', 700.00, 3500.00, 15000.00, 'per_minute', 1000.00),
     ('Rocket', 1500.00, 100000.00, 30000.00, 'flat', 300000.00),
     ('50Cal', 900.00, 2000.00, 2000.00, 'per_shot', 1.00);

@@ -18,10 +18,14 @@ macOS or Linux, developed and tested on M2 Pro Macbook Pro, MacOS 15.7.3
 
 ## Quick Start (Docker)
 
+- sqlite3 app/lmt_defence.db < app/schema.sql (This creates database)
+- pip install -r .\requirements.txt (This installs all dependecies used in this project)
+
 ```
 docker-compose build
 docker-compose up
 ```
+the app will now be running in a docker container
 
 API: **http://0.0.0.0:8000**
 Interactive docs: **http://0.0.0.0:8000/docs**
