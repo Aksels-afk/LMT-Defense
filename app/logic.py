@@ -123,7 +123,8 @@ def calculate_intercept(
     
     threat_level = classify_threat(speed_ms, altitude_m)
 
-    if threat_level == NOT_THREAT:
+    # Policy: only "THREAT" triggers an intercept action.
+    if threat_level != "THREAT":
         return {
             "threat_level": threat_level,
             "base_name": None,
@@ -136,7 +137,7 @@ def calculate_intercept(
             "interceptor_current_latitude": None,
             "interceptor_current_longitude": None,
             "calculated_cost_eur": None,
-            "note": "No interception: not a threat",
+            "note": f"No interception: threat level {threat_level}",
             "map_url": None,
         }
 
