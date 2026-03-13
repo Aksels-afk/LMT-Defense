@@ -1,4 +1,4 @@
-# LMT Defence Threat Classification & Interception python program
+# Defence Threat Classification & Interception python program
 
 A containerized Python application that classifies air threats from radar data and selects the best (most cost-effective or only feasible) interception method from three air defense bases in Latvia.
 
